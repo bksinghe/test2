@@ -1,0 +1,25 @@
+[project]
+name = "auto-filter-bot"
+version = "2.0.0"
+description = "Telegram auto filter bot with inline search, streaming and premium"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",  # long UI strings are fine
+    "B008",  # pyrogram filters are created at import time on purpose
+    "SIM105",  # contextlib.suppress is not always clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

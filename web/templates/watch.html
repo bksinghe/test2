@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{title}}</title>
+    <link rel="stylesheet" type="text/css" href="/static/style.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Raleway">
+    <link rel="stylesheet" href="https://cdn.plyr.io/3.7.8/plyr.css">
+</head>
+
+<body>
+    <header>
+        <div id="file-name">{{file_name}}</div>
+    </header>
+
+    <div class="container">
+        {{media_tag}}
+    </div>
+
+    <footer>
+        <center>
+            <h4>Video not playing? Your browser may not support this codec &mdash;
+                download the file and play it locally.</h4>
+        </center>
+    </footer>
+
+    <script src="https://cdn.plyr.io/3.7.8/plyr.js"></script>
+    <script>
+        const controls = [
+            'play-large', 'rewind', 'play', 'fast-forward', 'progress',
+            'current-time', 'duration', 'mute', 'settings', 'airplay',
+            'download', 'fullscreen'
+        ];
+        document.addEventListener('DOMContentLoaded', () => {
+            new Plyr('.player', { controls });
+        });
+    </script>
+</body>
+</html>

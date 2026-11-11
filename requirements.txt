@@ -1,14 +1,10 @@
 pyrofork==2.3.43
 tgcrypto
 motor
-marshmallow
-umongo
 pymongo
-pytz
 cinemagoer
 shortzy
 aiohttp
 aiofiles
-telegraph
 speedtest-cli
 uvloop

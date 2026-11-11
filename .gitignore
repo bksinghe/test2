@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+*.session
+*.session-journal
+restart.txt
+users.txt
+chats.txt
+eval_output.txt
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+cinemagoer.db
