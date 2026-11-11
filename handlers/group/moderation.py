@@ -9,6 +9,7 @@ from pyrogram.enums import ChatMembersFilter, ParseMode
 from pyrogram.errors import ChatAdminRequired, UserAdminInvalid
 from pyrogram.types import ChatPermissions
 
+from core.telegram import safe_answer, safe_edit
 from handlers.common import group_admin_guard, react
 from services.rights import is_chat_admin
 from ui import keyboards as kb
@@ -121,13 +122,13 @@ async def _kick(client: Client, chat_id: int, user_id: int) -> None:
 @Client.on_callback_query(filters.regex(r"^mgmt#"), group=0)
 async def manage_callback(client: Client, query):
     if not await is_chat_admin(client, query.message.chat.id, query.from_user.id):
-        await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+        await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
         return
 
     action = query.data.split("#", 1)[1]
     chat_id = query.message.chat.id
-    await query.answer()
-    await query.message.edit_text("Working on it, this can take a while…")
+    await safe_answer(query)
+    await safe_edit(query.message, "Working on it, this can take a while…")
 
     try:
         if action == "unmute_all":
@@ -160,7 +161,7 @@ async def manage_callback(client: Client, query):
         log.warning("bulk action %s failed: %s", action, error)
         summary = f"Something went wrong:\n<code>{error}</code>"
 
-    await query.message.edit_text(summary, parse_mode=ParseMode.HTML)
+    await safe_edit(query.message, summary)
 
 
 __all__ = ["ban_cmd", "manage_callback", "manage_cmd", "mute_cmd", "unban_cmd"]

@@ -9,6 +9,7 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 
 from core import state
+from core.telegram import safe_answer, safe_edit
 from db import media
 from handlers.common import react
 from services import search
@@ -56,18 +57,16 @@ async def delete_cmd(client: Client, message):
 @Client.on_callback_query(filters.regex(r"^delconfirm#"), group=ADMIN_GROUP)
 async def delete_confirm(client: Client, query):
     if not _is_admin(query):
-        await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+        await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
         return
     token = query.data.split("#", 1)[1]
     pending = state.delete_cache.pop(token)
     if pending is None:
-        await query.answer(texts.DELETE_CONFIRM_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.DELETE_CONFIRM_EXPIRED, show_alert=True)
         return
     query_text, filt = pending
     count = await media.delete(filt)
-    await query.message.edit_text(
-        texts.DELETE_DONE.format(count=count, query=query_text), parse_mode=ParseMode.HTML
-    )
+    await safe_edit(query.message, texts.DELETE_DONE.format(count=count, query=query_text))
 
 
 @Client.on_message(filters.command("delete_all"), group=ADMIN_GROUP)
@@ -90,13 +89,11 @@ async def delete_all_cmd(client: Client, message):
 @Client.on_callback_query(filters.regex(r"^deleteall$"), group=ADMIN_GROUP)
 async def delete_all_confirm(client: Client, query):
     if not _is_admin(query):
-        await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+        await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
         return
-    await query.answer()
+    await safe_answer(query)
     removed = await media.drop()
-    await query.message.edit_text(
-        texts.DELETE_ALL_DONE.format(count=removed), parse_mode=ParseMode.HTML
-    )
+    await safe_edit(query.message, texts.DELETE_ALL_DONE.format(count=removed))
 
 
 __all__ = ["delete_all_cmd", "delete_all_confirm", "delete_cmd", "delete_confirm"]

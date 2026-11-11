@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -10,6 +11,7 @@ import time
 from aiohttp import web
 from pyrogram import Client
 from pyrogram.enums import ParseMode
+from pyrogram.errors import RPCError
 
 from config import settings
 from core import state
@@ -36,6 +38,7 @@ class Bot(Client):
     # ------------------------------------------------------------- startup
     async def start(self) -> Bot:
         state.START_TIME = time.time()
+        _install_error_filter()
 
         if not await mongo.ping():
             raise RuntimeError(
@@ -132,6 +135,32 @@ class Bot(Client):
                 )
             except Exception:  # noqa: BLE001 - admin may have blocked the bot
                 pass
+
+
+def _install_error_filter() -> None:
+    """Stop harmless Telegram errors from printing full tracebacks.
+
+    Pyrogram runs every handler in its own task and does not catch exceptions,
+    so an ``RPCError`` we did not anticipate (a message that is too old, a user
+    that blocked the bot, a callback pressed twice) ended up as a scary
+    "Task exception was never retrieved" traceback in the logs. The helpers in
+    :mod:`core.telegram` handle the known ones; this is the last net for the
+    rest - real bugs still get their full traceback.
+    """
+    loop = asyncio.get_running_loop()
+    previous = loop.get_exception_handler()
+
+    def handler(loop_, context) -> None:
+        error = context.get("exception")
+        if isinstance(error, RPCError):
+            log.warning("telegram error ignored: %s", error)
+            return
+        if previous is not None:
+            previous(loop_, context)
+        else:
+            loop_.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)
 
 
 __all__ = ["Bot", "RESTART_FILE"]

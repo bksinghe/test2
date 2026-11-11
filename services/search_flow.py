@@ -18,6 +18,7 @@ from pyrogram.types import InlineKeyboardMarkup, Message
 
 from config import settings
 from core import state
+from core.telegram import safe_edit, safe_send
 from services import delivery, imdb, render
 from services import search as search_service
 from services.settings import get_settings
@@ -159,12 +160,8 @@ async def send_page(
 ) -> Message | None:
     """Send the page as a photo (IMDb poster) or as text, editing in place."""
     if edit and placeholder is not None:
-        return await placeholder.edit_text(
-            page.text,
-            reply_markup=page.keyboard,
-            disable_web_page_preview=True,
-            parse_mode=ParseMode.HTML,
-        )
+        await safe_edit(placeholder, page.text, page.keyboard)
+        return placeholder
 
     if imdb_data and imdb_data.get("poster"):
         photo_message = await _send_photo(
@@ -180,19 +177,10 @@ async def send_page(
             return photo_message
 
     if placeholder is not None:
-        return await placeholder.edit_text(
-            page.text,
-            reply_markup=page.keyboard,
-            disable_web_page_preview=True,
-            parse_mode=ParseMode.HTML,
-        )
-    return await client.send_message(
-        chat_id=chat_id,
-        text=page.text,
-        reply_markup=page.keyboard,
-        disable_web_page_preview=True,
-        parse_mode=ParseMode.HTML,
-        reply_to_message_id=reply_to_id,
+        await safe_edit(placeholder, page.text, page.keyboard)
+        return placeholder
+    return await safe_send(
+        chat_id, page.text, page.keyboard, client=client, reply_to=reply_to_id
     )
 
 
@@ -253,18 +241,18 @@ async def _nothing_found(
             ]
             buttons.append(kb.close_row())
             text = texts.SUGGESTIONS.format(mention=mention, query=html.escape(query))
+            markup = InlineKeyboardMarkup(buttons)
             if placeholder is not None:
-                sent = await placeholder.edit_text(
-                    text, reply_markup=InlineKeyboardMarkup(buttons)
-                )
+                await safe_edit(placeholder, text, markup)
+                sent = placeholder
             else:
-                sent = await client.send_message(
-                    chat_id=chat_id,
-                    text=text,
-                    reply_markup=InlineKeyboardMarkup(buttons),
-                    reply_to_message_id=reply_to_id,
+                sent = await safe_send(
+                    chat_id, text, markup, client=client, reply_to=reply_to_id
                 )
-            delivery.schedule_cleanup(client, chat_id=chat_id, message_ids=[sent.id], delay=300)
+            if sent is not None:
+                delivery.schedule_cleanup(
+                    client, chat_id=chat_id, message_ids=[sent.id], delay=300
+                )
             return
 
     google = query.replace(" ", "+")
@@ -279,12 +267,12 @@ async def _nothing_found(
     )
     text = texts.NOT_FOUND.format(mention=mention, query=html.escape(query))
     if placeholder is not None:
-        sent = await placeholder.edit_text(text, reply_markup=buttons)
+        await safe_edit(placeholder, text, buttons)
+        sent = placeholder
     else:
-        sent = await client.send_message(
-            chat_id=chat_id, text=text, reply_markup=buttons, reply_to_message_id=reply_to_id
-        )
-    delivery.schedule_cleanup(client, chat_id=chat_id, message_ids=[sent.id], delay=60)
+        sent = await safe_send(chat_id, text, buttons, client=client, reply_to=reply_to_id)
+    if sent is not None:
+        delivery.schedule_cleanup(client, chat_id=chat_id, message_ids=[sent.id], delay=60)
 
 
 __all__ = ["build_caption", "new_key", "run_search", "send_page"]

@@ -11,6 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup
 from config import settings
 from core import state
 from core.fmt import readable_time
+from core.telegram import SEND_IMPOSSIBLE
 from db import media
 from handlers.common import GROUP_TYPES, react, send_plans, send_start
 from services import deeplink, delivery, gates, premium, search, verify
@@ -107,13 +108,20 @@ async def _deliver(client: Client, message, payload: deeplink.StartPayload) -> N
         if await _send_shortlink(message, payload, chat_settings, file):
             return
 
-    await delivery.deliver_single(
-        client,
-        chat_id=message.chat.id,
-        group_id=group_id,
-        file=file,
-        chat_settings=chat_settings,
-    )
+    try:
+        await delivery.deliver_single(
+            client,
+            chat_id=message.chat.id,
+            group_id=group_id,
+            file=file,
+            chat_settings=chat_settings,
+        )
+    except SEND_IMPOSSIBLE as error:
+        # the user blocked the bot between the button press and the delivery
+        log.debug("file %s not delivered: %s", file.file_id, error)
+    except Exception as error:  # noqa: BLE001 - a stale file id must not crash
+        log.warning("delivery of %s failed: %s", file.file_id, error)
+        await message.reply_text(texts.SOMETHING_WRONG)
 
 
 async def _send_shortlink(message, payload, chat_settings, file) -> bool:

@@ -67,6 +67,26 @@ groups are meaningful:
 | `0`   | commands, menus, admin actions | one handler per callback prefix |
 | `10`  | PM search, group auto filter | runs only if no command matched |
 
+### Telegram errors
+
+Telegram answers normal situations with an error: a button in a two-day-old
+message cannot be edited (`MESSAGE_ID_INVALID`), pressing a button twice makes
+the second callback query stale (`QUERY_ID_INVALID`), the same page rendered
+twice is (`MESSAGE_NOT_MODIFIED`), and a user who blocked the bot makes
+`/start` fail (`USER_IS_BLOCKED`). Every user facing call therefore goes
+through `core/telegram.py`:
+
+| helper | behaviour |
+|--------|-----------|
+| `safe_edit` | edits text/caption, ignores "not modified", replaces an expired message with a fresh one |
+| `safe_send` | returns `None` for blocked/kicked peers instead of raising, clips text to 4096 |
+| `safe_answer` | swallows a stale callback query id |
+| `safe_react` | best effort reaction, old messages are skipped |
+
+As a last net `Bot.start()` installs an asyncio exception filter, so an
+unexpected `RPCError` becomes one log line instead of a full traceback.
+Real exceptions are untouched.
+
 ### Callback data
 
 `menu#<name>`, `settings#<key>#<chat_id>`, `nav#<key>#<viewer>#<offset>`,

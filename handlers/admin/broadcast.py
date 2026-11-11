@@ -8,7 +8,6 @@ import time
 from collections.abc import AsyncIterator
 
 from pyrogram import Client, filters
-from pyrogram.enums import ParseMode
 from pyrogram.errors import (
     ChatWriteForbidden,
     FloodWait,
@@ -20,6 +19,7 @@ from pyrogram.types import Message
 
 from core import state
 from core.fmt import readable_time
+from core.telegram import safe_answer, safe_edit
 from db import chats as chats_db
 from db import users as users_db
 from services.rights import is_bot_admin
@@ -66,7 +66,7 @@ async def broadcast_cmd(client: Client, message):
         async for chat_id in _targets(target):
             if state.broadcast_cancel[target]:
                 state.broadcast_cancel[target] = False
-                await status.edit_text(texts.BROADCAST_CANCELLED)
+                await safe_edit(status, texts.BROADCAST_CANCELLED)
                 return
 
             try:
@@ -91,24 +91,21 @@ async def broadcast_cmd(client: Client, message):
 
             done += 1
             if done % PROGRESS_EVERY == 0:
-                try:
-                    await status.edit_text(
-                        texts.BROADCAST_PROGRESS.format(
-                            target=target, done=done, total=total,
-                            success=success, failed=failed,
-                        ),
-                        reply_markup=kb.broadcast_cancel_keyboard(target),
-                        parse_mode=ParseMode.HTML,
-                    )
-                except Exception as error:  # noqa: BLE001
-                    log.debug("broadcast progress update failed: %s", error)
+                await safe_edit(
+                    status,
+                    texts.BROADCAST_PROGRESS.format(
+                        target=target, done=done, total=total,
+                        success=success, failed=failed,
+                    ),
+                    kb.broadcast_cancel_keyboard(target),
+                )
 
-    await status.edit_text(
+    await safe_edit(
+        status,
         texts.BROADCAST_DONE.format(
             duration=readable_time(time.time() - started),
             target=target, done=done, total=total, success=success, failed=failed,
         ),
-        parse_mode=ParseMode.HTML,
     )
 
 
@@ -131,12 +128,12 @@ async def _copy(client: Client, source: Message, chat_id: int, pin: bool) -> boo
 @Client.on_callback_query(filters.regex(r"^broadcast_cancel#"), group=ADMIN_GROUP)
 async def broadcast_cancel(client: Client, query):
     if not is_bot_admin(query.from_user.id):
-        await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+        await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
         return
     target = query.data.split("#", 1)[1]
     if target in state.broadcast_cancel:
         state.broadcast_cancel[target] = True
-    await query.answer("Stopping…")
+    await safe_answer(query, "Stopping…")
 
 
 __all__ = ["broadcast_cancel", "broadcast_cmd"]

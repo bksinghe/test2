@@ -11,6 +11,7 @@ from pyrogram.types import InlineKeyboardMarkup, Message
 
 from core import state
 from core.fmt import readable_time
+from core.telegram import safe_answer, safe_edit
 from services import deeplink, indexer
 from services.rights import is_bot_admin
 from ui import keyboards as kb
@@ -98,7 +99,7 @@ async def _handle_request(client: Client, message: Message) -> None:
 @Client.on_callback_query(filters.regex(r"^index#"), group=ADMIN_GROUP)
 async def index_callback(client: Client, query):
     if not is_bot_admin(query.from_user.id):
-        await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+        await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
         return
 
     parts = query.data.split("#")
@@ -106,10 +107,10 @@ async def index_callback(client: Client, query):
 
     if action == "cancel":
         state.index_cancel = True
-        await query.answer("Cancelling…")
+        await safe_answer(query, "Cancelling…")
         return
     if action != "yes" or len(parts) != 5:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
 
     chat_ref = parts[2]
@@ -117,23 +118,23 @@ async def index_callback(client: Client, query):
     last_id, skip = int(parts[3]), int(parts[4])
 
     if state.index_lock.locked():
-        await query.answer(texts.INDEX_BUSY, show_alert=True)
+        await safe_answer(query, texts.INDEX_BUSY, show_alert=True)
         return
 
-    await query.answer()
+    await safe_answer(query)
     status = query.message
-    await status.edit_text(texts.INDEX_STARTED)
+    await safe_edit(status, texts.INDEX_STARTED)
     started = time.time()
 
     async def progress(stats: indexer.IndexStats) -> None:
-        await status.edit_text(
+        await safe_edit(
+            status,
             texts.INDEX_PROGRESS.format(
                 title=chat_ref, current=stats.current, saved=stats.saved,
                 duplicates=stats.duplicates, deleted=stats.deleted,
                 skipped=stats.skipped, errors=stats.errors,
             ),
-            reply_markup=_cancel_markup(),
-            parse_mode=ParseMode.HTML,
+            _cancel_markup(),
         )
 
     async with state.index_lock:
@@ -150,7 +151,7 @@ async def index_callback(client: Client, query):
             duration=duration, saved=stats.saved, duplicates=stats.duplicates,
             deleted=stats.deleted, skipped=stats.skipped, errors=stats.errors,
         )
-    await status.edit_text(body, parse_mode=ParseMode.HTML)
+    await safe_edit(status, body)
 
 
 __all__ = ["index_callback", "index_request"]

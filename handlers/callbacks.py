@@ -12,10 +12,10 @@ import logging
 
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
-from pyrogram.errors import MessageNotModified
 
 from config import settings
 from core import state
+from core.telegram import safe_answer, safe_edit, safe_edit_markup
 from handlers.common import bot_link
 from services import (
     deeplink,
@@ -47,9 +47,9 @@ async def _open_link(query, payload: str) -> bool:
     """Answer a callback by opening the bot with ``payload``; ``False`` if impossible."""
     url = bot_link(payload)
     if url is None:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return False
-    await query.answer(url=url)
+    await safe_answer(query, url=url)
     return True
 
 
@@ -61,21 +61,8 @@ def _int(value: str) -> int:
 
 
 async def _edit(query, text: str, markup=None) -> None:
-    """Edit a text message or, when it is a photo, its caption."""
-    try:
-        if query.message.photo or query.message.video:
-            await query.message.edit_caption(
-                caption=text, reply_markup=markup, parse_mode=ParseMode.HTML
-            )
-        else:
-            await query.message.edit_text(
-                text,
-                reply_markup=markup,
-                disable_web_page_preview=True,
-                parse_mode=ParseMode.HTML,
-            )
-    except MessageNotModified:
-        pass
+    """Edit the button's message; expired messages are replaced, not crashed."""
+    await safe_edit(query.message, text, markup, parse_mode=ParseMode.HTML)
 
 
 @Client.on_callback_query(filters.regex(CALLBACK_RE), group=0)
@@ -85,9 +72,9 @@ async def on_callback(client: Client, query):
     if data == "close":
         await _close(query)
     elif data == "noop":
-        await query.answer("⚠️")
+        await safe_answer(query, "⚠️")
     elif data == "instructions":
-        await query.answer(texts.INSTRUCTIONS, show_alert=True)
+        await safe_answer(query, texts.INSTRUCTIONS, show_alert=True)
     elif data == "trial":
         await _trial(query)
     elif data.startswith("menu#"):
@@ -118,7 +105,7 @@ async def on_callback(client: Client, query):
 
 # ------------------------------------------------------------------- close
 async def _close(query) -> None:
-    await query.answer(texts.CLOSED)
+    await safe_answer(query, texts.CLOSED)
     replied = query.message.reply_to_message
     try:
         await query.message.delete()
@@ -156,7 +143,7 @@ async def _menu(client: Client, query, name: str) -> None:
         await _edit(query, texts.USER_COMMANDS, kb.back_keyboard("menu#help"))
     elif name == "admin_cmd":
         if not settings.is_admin(query.from_user.id):
-            await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+            await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
             return
         await _edit(query, texts.ADMIN_COMMANDS, kb.back_keyboard("menu#help"))
     elif name == "plans":
@@ -165,12 +152,12 @@ async def _menu(client: Client, query, name: str) -> None:
         from services import stats
 
         if not settings.is_admin(query.from_user.id):
-            await query.answer(texts.ADMIN_ONLY_BUTTON, show_alert=True)
+            await safe_answer(query, texts.ADMIN_ONLY_BUTTON, show_alert=True)
             return
         snap = await stats.snapshot()
         await _edit(query, stats.text(snap), kb.back_keyboard("menu#about"))
     else:
-        await query.answer()
+        await safe_answer(query)
 
 
 async def _trial(query) -> None:
@@ -186,25 +173,22 @@ async def _toggle_setting(client: Client, query, data: str) -> None:
         _, key, chat_id = data.split("#", 2)
         chat_id = int(chat_id)
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
 
     if not await is_chat_admin(client, chat_id, query.from_user.id):
-        await query.answer("This is not for you!", show_alert=True)
+        await safe_answer(query, "This is not for you!", show_alert=True)
         return
 
     current = await get_settings(chat_id)
     if not isinstance(current.get(key), bool):
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
 
     value = not current[key]
     updated = await update_setting(chat_id, key, value)
-    try:
-        await query.message.edit_reply_markup(kb.settings_keyboard(updated, chat_id))
-    except MessageNotModified:
-        pass
-    await query.answer("✅ enabled" if value else "❌ disabled")
+    await safe_edit_markup(query.message, kb.settings_keyboard(updated, chat_id))
+    await safe_answer(query, "✅ enabled" if value else "❌ disabled")
 
 
 # ---------------------------------------------------------------- pagination
@@ -212,14 +196,14 @@ async def _nav(client: Client, query, data: str) -> None:
     try:
         _, key, req, offset = data.split("#")
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
     session = state.search_cache.get(key)
     if session is None:
-        await query.answer(texts.SEARCH_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.SEARCH_EXPIRED, show_alert=True)
         return
 
     page = await render.render_page(
@@ -232,14 +216,14 @@ async def _nav_filtered(client: Client, query, data: str) -> None:
     try:
         _, kind, value, key, req, offset = data.split("#")
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
     session = state.search_cache.get(key)
     if session is None:
-        await query.answer(texts.SEARCH_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.SEARCH_EXPIRED, show_alert=True)
         return
 
     lang = value if kind == "lang" else ""
@@ -258,13 +242,13 @@ async def _filter_menu(query, data: str) -> None:
     try:
         _, kind, key, req, offset = data.split("#")
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
     if state.search_cache.get(key) is None:
-        await query.answer(texts.SEARCH_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.SEARCH_EXPIRED, show_alert=True)
         return
 
     values = settings.languages if kind == "lang" else settings.quality
@@ -280,14 +264,14 @@ async def _apply_filter(client: Client, query, data: str) -> None:
     try:
         _, kind, value, key, req, offset = data.split("#")
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
     session = state.search_cache.get(key)
     if session is None:
-        await query.answer(texts.SEARCH_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.SEARCH_EXPIRED, show_alert=True)
         return
 
     lang = value if kind == "lang" else ""
@@ -296,7 +280,7 @@ async def _apply_filter(client: Client, query, data: str) -> None:
         session, viewer_id=query.from_user.id, offset=0, lang=lang, quality=quality
     )
     if not page.files:
-        await query.answer(f"Sorry, no {value} files were found 😕", show_alert=True)
+        await safe_answer(query, f"Sorry, no {value} files were found 😕", show_alert=True)
         return
     await _edit(query, page.text, page.keyboard)
 
@@ -305,14 +289,14 @@ async def _send_all(client: Client, query, data: str) -> None:
     try:
         _, key, req = data.split("#")
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
     session = state.search_cache.get(key)
     if session is None:
-        await query.answer(texts.SEARCH_EXPIRED, show_alert=True)
+        await safe_answer(query, texts.SEARCH_EXPIRED, show_alert=True)
         return
     await _open_link(query, f"all_{session.chat_id}_{session.key}")
 
@@ -322,7 +306,7 @@ async def _open_file(client: Client, query, data: str) -> None:
     try:
         _, file_id = data.split("#", 1)
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     await _open_link(query, f"file_{query.message.chat.id}_{file_id}")
 
@@ -331,7 +315,7 @@ async def _regain(query, data: str) -> None:
     try:
         _, kind, chat_id, token = data.split("#", 3)
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     payload = f"all_{chat_id}_{token}" if kind == "all" else f"file_{chat_id}_{token}"
     if not await _open_link(query, payload):
@@ -347,14 +331,11 @@ async def _stream(client: Client, query, data: str) -> None:
     file_id = data.split("#", 1)[1]
     message = await streaming.ensure_message(client, file_id)
     if message is None:
-        await query.answer("This file cannot be streamed right now.", show_alert=True)
+        await safe_answer(query, "This file cannot be streamed right now.", show_alert=True)
         return
-    await query.answer()
+    await safe_answer(query)
     watch_url, download_url = streaming.urls(message.id)
-    try:
-        await query.message.edit_reply_markup(kb.watch_keyboard(watch_url, download_url))
-    except MessageNotModified:
-        pass
+    await safe_edit_markup(query.message, kb.watch_keyboard(watch_url, download_url))
 
 
 # --------------------------------------------------------------- force sub
@@ -364,16 +345,13 @@ async def _check_sub(client: Client, query, data: str) -> None:
     gate = await gates.fsub_gate(client, parsed.group_id or 0, query.from_user.id, payload)
     if gate:
         _, markup = gate
-        await query.answer("Please join the channel first.", show_alert=True)
-        try:
-            await query.message.edit_reply_markup(markup)
-        except MessageNotModified:
-            pass
+        await safe_answer(query, "Please join the channel first.", show_alert=True)
+        await safe_edit_markup(query.message, markup)
         return
 
     if not payload:
-        await query.answer()
-        await query.message.edit_text(texts.VERIFIED.format(duration="now"))
+        await safe_answer(query)
+        await _edit(query, texts.VERIFIED.format(duration="now"))
         return
     if not await _open_link(query, payload):
         return
@@ -388,18 +366,18 @@ async def _suggest(client: Client, query, data: str) -> None:
     try:
         _, movie_id, req = data.split("#", 2)
     except ValueError:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
     if not _viewer_ok(query, req):
-        await query.answer(texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
+        await safe_answer(query, texts.NOT_FOR_YOU.format(name=query.from_user.first_name), show_alert=True)
         return
 
     title = await imdb.title_for_id(movie_id)
     if not title:
-        await query.answer(texts.SOMETHING_WRONG, show_alert=True)
+        await safe_answer(query, texts.SOMETHING_WRONG, show_alert=True)
         return
 
-    await query.answer()
+    await safe_answer(query)
     await _edit(query, texts.SEARCHING.format(query=html.escape(title)))
     chat_settings = await get_settings(query.message.chat.id)
     await search_flow.run_search(

@@ -15,6 +15,7 @@ from pyrogram.types import (
 from config import settings
 from core import state
 from core.fmt import human_size
+from core.telegram import safe_inline_answer
 from services import search
 from ui import texts
 
@@ -50,7 +51,8 @@ def _caption(file) -> str:
 @Client.on_inline_query()
 async def inline_search(client: Client, query: InlineQuery):
     if query.from_user and query.from_user.id in state.banned_users:
-        await query.answer(
+        await safe_inline_answer(
+            query,
             results=[],
             cache_time=0,
             switch_pm_text=texts.INLINE_BANNED,
@@ -61,7 +63,8 @@ async def inline_search(client: Client, query: InlineQuery):
     text = (query.query or "").strip()
     offset = int(query.offset or 0)
     if not text:
-        await query.answer(
+        await safe_inline_answer(
+            query,
             results=[],
             cache_time=0,
             switch_pm_text="Type a movie or series name",
@@ -83,7 +86,8 @@ async def inline_search(client: Client, query: InlineQuery):
 
     if results:
         label = f"{texts.INLINE_RESULTS} - {result.total} for {text}"
-        await query.answer(
+        await safe_inline_answer(
+            query,
             results=results,
             is_personal=True,
             cache_time=settings.cache_time,
@@ -92,7 +96,8 @@ async def inline_search(client: Client, query: InlineQuery):
             next_offset=str(result.next_offset),
         )
     else:
-        await query.answer(
+        await safe_inline_answer(
+            query,
             results=[],
             is_personal=True,
             cache_time=settings.cache_time,
