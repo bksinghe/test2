@@ -149,11 +149,30 @@ docker run --env-file .env -p 80:80 auto-filter-bot
 
 The new code reads the same `Files` collection, so indexed media keeps working.
 Bans, verification, premium, group settings and the PM search flag changed
-shape; convert them once with:
+shape, so the bot **migrates the database itself on every start** (idempotent,
+only documents that still look legacy are touched):
+
+| legacy | new |
+|---|---|
+| `Users.ban_status` | `Users.banned` |
+| `Users.verify_status` | `Users.verify` |
+| `uersz` (typo'd premium collection) | `Users.premium_until` / `trial_used` |
+| `Groups.chat_status` | `Groups.disabled` |
+| `Groups.<flat settings>` | `Groups.settings.<key>` |
+| `bot_id.bot_pm_search` | `BotMeta.pm_search` |
+
+Old databases can also hold **duplicate** `id`s (the previous bot inserted
+users with `find_one` + `insert`), which makes a unique index impossible — the
+old code aborted with `E11000 duplicate key error ... index: id_1`. Startup now
+merges such rows (a ban, verification or premium flag is never lost), then
+builds the index. If an index still cannot be built the bot logs it and keeps
+running.
+
+To inspect or repair a database manually:
 
 ```bash
-python scripts/migrate_db.py           # dry run
-python scripts/migrate_db.py --apply   # write
+python scripts/migrate_db.py           # report only, writes nothing
+python scripts/migrate_db.py --apply   # migrate + merge duplicates + indexes
 ```
 
 The legacy collections (`uersz`, `bot_id`) are only read, never modified, so

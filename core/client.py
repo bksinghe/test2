@@ -15,7 +15,7 @@ from pyrogram.errors import RPCError
 
 from config import settings
 from core import state
-from db import chats, mongo, users
+from db import chats, migrate, mongo, users
 
 log = logging.getLogger(__name__)
 
@@ -44,6 +44,9 @@ class Bot(Client):
             raise RuntimeError(
                 "cannot reach MongoDB - check DATABASE_URL (the bot refuses to run without it)"
             )
+        # convert a legacy database before anything reads it, then make sure the
+        # unique indexes exist (duplicates from the old bot are merged there)
+        await migrate.run()
         await mongo.ensure_indexes()
 
         state.banned_users.update(await users.banned_ids())
