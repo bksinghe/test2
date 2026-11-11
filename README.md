@@ -129,6 +129,15 @@ cp .env.example .env   # then edit it
 python bot.py
 ```
 
+Optional speedups: `pip install tgcrypto uvloop` (TgCrypto speeds up the
+crypto layer, uvloop replaces the event loop; both are imported lazily, the bot
+runs fine without them).
+
+`bot.py` creates the event loop **before** importing pyrogram on purpose:
+pyrogram calls `asyncio.get_event_loop()` while being imported and uvloop's
+policy raises instead of creating a loop on demand, which otherwise fails with
+`RuntimeError: There is no current event loop in thread 'MainThread'`.
+
 Docker:
 
 ```bash

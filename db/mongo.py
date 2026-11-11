@@ -9,7 +9,11 @@ from config import settings
 FALLBACK_URI = "mongodb://localhost:27017"
 
 client: AsyncIOMotorClient = AsyncIOMotorClient(
-    settings.database_url or FALLBACK_URI, tz_aware=True
+    settings.database_url or FALLBACK_URI,
+    tz_aware=True,
+    # fail fast instead of motor's 30s default when the URI is wrong
+    serverSelectionTimeoutMS=10000,
+    connectTimeoutMS=10000,
 )
 db = client[settings.database_name]
 
